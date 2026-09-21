@@ -112,6 +112,12 @@ pytest                       # no network, no GPU, no Kinect, no running brain n
 
 `tests/banc.py` is the end to end bench. It needs a running brain, so it needs a GPU.
 
+## Running it yourself
+
+[INSTALL.md](INSTALL.md) is the honest path from nothing to a face that answers you: stage 1 is one Linux machine
+with a GPU, a microphone and a screen (no Kinect, no Raspberry Pi, about half an hour), stage 2 adds the Kinect,
+the Pi and the house. It also lists what will bite you.
+
 ## What this repo is not
 
 You can't install it in five minutes. The brain talks to tool servers (Home Assistant, Spotify, calendar, CRM) that
