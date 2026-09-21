@@ -28,14 +28,23 @@ test 8813. Les temps viennent de `/metrics` de cette instance, pas d'un chronome
 
 | | `gpt-oss:20b-32k` | `gemma4:26b-a4b-it-qat` |
 |---|---|---|
-| banc | **51/51** | 50/51 |
+| banc, au moment de la comparaison (51 cas) | **51/51** | 50/51 |
 | GPU de reflexion par echange | **1,50 s** | 2,33 s |
-| delai avant la premiere phrase | **1,59 s** | 2,54 s |
+| temps de modele jusqu'a la premiere phrase | **1,59 s** | 2,54 s |
 | sur la carte | 12,9 Go | 14 Go |
 
-Le delai avant la premiere phrase est celui qui compte : c'est ce qu'on ressent comme la vitesse de Bulle, la
-suite se disant pendant que le modele ecrit encore. gpt-oss gagne des deux cotes, la question est tranchee
-jusqu'au prochain modele qui tienne dans quinze gigaoctets.
+Le banc a grossi depuis : gpt-oss passe **58/58** aujourd'hui.
+
+Attention a la troisieme ligne : elle ne mesure que le modele. Elle demarre quand Whisper a fini et s'arrete
+quand la phrase entre dans la file de la voix, donc elle ignore les deux bouts. Ce qu'on attend dans la piece
+est plus long : environ une seconde pour que le Pi decide qu'on a fini de parler, 0,7 s de Whisper, puis le
+modele, puis environ 2 s pour synthetiser la premiere phrase. Sur la video de demonstration, on compte 5 a 8 s
+entre la fin de la question et le premier mot. Les deux sont mesures : `bulle_premiere_phrase` pour le modele
+seul, `bulle_premier_son` pour le delai ressenti.
+
+Pour le choix du modele, c'est bien la troisieme ligne qui tranche, puisque le reste de la chaine est le meme
+des deux cotes. gpt-oss gagne partout, la question est reglee jusqu'au prochain modele qui tienne dans quinze
+gigaoctets.
 
 Deux choses a savoir quand meme : le format Harmony de gpt-oss echoue sur les appels d'outils **paralleles**,
 donc chaque outil part dans son propre tour ; et `LLM_THINK=low` est deliberement bas — on paie un modele a

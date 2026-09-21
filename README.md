@@ -37,17 +37,27 @@ image of the room is stored or sent anywhere.
 
 ## Speed
 
-I picked the model by replaying the same bench of 51 real sentences against every model that fits on the card next
+I picked the model by replaying the same bench of real sentences against every model that fits on the card next
 to Whisper and the TTS. The 3090 is shared with other things, so that's about 15 GB.
 
 | | `gpt-oss:20b` | second best |
 |---|---|---|
-| bench | **51/51** | 50/51 |
+| bench, when I compared (51 cases then) | **51/51** | 50/51 |
 | GPU time per exchange (LLM only) | **1.50 s** | 2.33 s |
-| from the end of my sentence to the first spoken word | **1.59 s** | 2.54 s |
+| model time to the first sentence | **1.59 s** | 2.54 s |
 
-The last line is the one you feel. The rest of the answer is spoken while the model is still writing. These
-numbers come from the `/metrics` endpoint of the brain, not from a stopwatch.
+The bench has grown since; `gpt-oss:20b` passes **58/58** today.
+
+Careful with that last row: it is the model alone. It starts once Whisper is done and stops when the sentence
+enters the speech queue, so it leaves out both ends. What you wait for in the room is longer: about a second for
+the Pi to decide I stopped talking, 0.7 s of Whisper, then the model, then about 2 s to synthesise the first
+sentence. In the demo video you can count 5 to 8 seconds between the end of my sentence and the first word of the
+answer, and the weather is the slow one because it calls a tool first. The rest of the answer is spoken while the
+model is still writing, so the whole reply is not much longer than its first sentence.
+
+These numbers come from the `/metrics` endpoint of the brain, except the last one, which you can time on the
+video yourself. The brain measures both: `bulle_premiere_phrase` for the model alone, `bulle_premier_son` from
+the end of the utterance to the first sound sent to the TV.
 
 ## Cards
 
