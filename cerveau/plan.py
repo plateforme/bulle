@@ -451,7 +451,7 @@ def geocoder(recherche, autour=None, ville_defaut=None):
     NOTOIRE (l'importance de Nominatim : 0,62 pour la Tour Eiffel, 0,0 pour une succursale de banque homonyme)
     ou si Greg a lui-même nommé la ville où il est.
     """
-    tag = categorie(recherche)
+    tag = categorie(recherche, ville_defaut)
     if tag and autour:                       # « une pharmacie » n'est pas un nom : c'est une recherche par catégorie
         # et si Overpass ne répond pas, on ne se rabat PAS sur une recherche par nom : « un dépanneur » trouvait
         # alors « Le ti dépanneur » à Saint-Pierre-et-Miquelon. Mieux vaut dire qu'on n'a rien trouvé.
@@ -578,11 +578,35 @@ def _sans_accents(t):
     return "".join(c for c in unicodedata.normalize("NFD", str(t).lower()) if unicodedata.category(c) != "Mn")
 
 
-def categorie(recherche):
-    """« trouve-moi une pharmacie » → amenity=pharmacy ; un nom propre ne correspond à rien et passe à Nominatim."""
+# Mots qui ne distinguent rien : ils entourent une demande générique sans la nommer.
+MOTS_VIDES = {"le", "la", "les", "l", "un", "une", "des", "du", "de", "d", "au", "aux", "a", "en", "dans", "the",
+              "pres", "proche", "proches", "plus", "ici", "autour", "moi", "nous", "chez", "vers", "cote",
+              "ouvert", "ouverte", "ouverts", "ouvertes", "prochain", "prochaine", "prochains", "prochaines",
+              "quartier", "coin", "environ", "pas", "loin", "trouve", "trouver", "cherche", "chercher", "montre",
+              "montrer", "localise", "localiser", "situe", "situer", "est", "ou", "quel", "quelle", "bon", "bonne",
+              "meilleur", "meilleure", "petit", "petite", "grand", "grande", "nouveau", "nouvelle"}
+INDEFINI = re.compile(r"(?:^|\W)(un|une|des)\W", re.I)
+
+
+def categorie(recherche, ville=None):
+    """« trouve-moi une pharmacie » → amenity=pharmacy ; « le musée McCord » → None, c'est un NOM.
+
+    Le mot de catégorie était cherché en simple sous-chaîne : « musée McCord » partait donc en recherche de
+    musées alentour, qui renvoyait le bon musée mais SANS son adresse, et plus rien du tout dès qu'Overpass
+    boudait — la même demande marchait ou pas selon la minute (vu le 21/09).
+
+    Deux signaux tranchent : un déterminant indéfini annonce une catégorie (« UN restaurant italien »), et
+    inversement un mot distinctif qui subsiste une fois retirés le mot de catégorie, la ville et les mots vides
+    annonce un nom propre (« McCord », « du Parlement »).
+    """
     n = _sans_accents(recherche)
     for mot, tag in sorted(CATEGORIES.items(), key=lambda kv: -len(kv[0])):
-        if mot in n: return tag
+        if mot not in n: continue
+        if INDEFINI.search(" " + n.split(mot)[0] + " "): return tag
+        reste = n.replace(mot, " ")
+        if ville: reste = reste.replace(_sans_accents(ville), " ")
+        distinctifs = [m for m in re.findall(r"[a-z0-9'-]+", reste) if len(m) > 2 and m not in MOTS_VIDES]
+        return None if distinctifs else tag
     return None
 
 

@@ -32,7 +32,7 @@ cerveau:
   # Indice donné à Whisper (exemples de phrases commençant par le nom)
   # ATTENTION : Whisper recrache parfois son indice mot pour mot sur du bruit (3 fausses météo le 19/09).
   # L'indice doit donc être une LISTE DE MOTS, jamais une phrase qui ressemble à une demande.
-  indice_stt: "Bulle. Spotify, CXN100, Home Assistant, Montréal, mode club, titres likés."
+  indice_stt: "Bulle. Spotify, CXN100, Home Assistant, Montréal, mode club, titres likés, McCord."
   # Transcriptions ignorées d'office (hallucinations de Whisper sur du bruit) : expressions régulières, sans accents
   hallucinations: ['(.{6,}?)[ ,]+\1[ ,]+\1']      # même bout de phrase répété trois fois
 

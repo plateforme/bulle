@@ -69,24 +69,29 @@ async def _lumieres(ctx, cle, outil, extra=None):
     return faits, rates
 
 
-@outil("allumer_tout", "Allume toutes les lumières de la maison, et règle leur luminosité quand Greg la donne (« toutes les "
-       "lumières à 10 % », « baisse toutes les lumières ») — y compris celles qui sont déjà allumées. Uniquement pour TOUTES "
-       "les lumières ; jamais pour une ambiance, une scène ou un autre appareil.",
-       {"luminosite_pct": {"type": "integer", "description": "luminosité 1-100, seulement si Greg la demande"}},
+@outil("allumer_tout", "Allume toutes les lumières de la maison, et règle leur luminosité ou leur COULEUR quand Greg les "
+       "donne (« toutes les lumières à 10 % », « mets toutes les lumières en rouge », « baisse toutes les lumières ») — y "
+       "compris celles qui sont déjà allumées. Uniquement pour TOUTES les lumières ; jamais pour une ambiance, une scène ou "
+       "un autre appareil. Pour une seule lampe, c'est allumer.",
+       {"luminosite_pct": {"type": "integer", "description": "luminosité 1-100, seulement si Greg la demande"},
+        "couleur": {"type": "string", "description": "couleur en français (rouge, bleu, orange, blanc chaud…), "
+                                                     "seulement si Greg la demande"}},
        necessite=["allumer", "etat_maison"])
 async def allumer_tout(ctx, args):
-    lum = args.get("luminosite_pct")
+    lum, coul = args.get("luminosite_pct"), (args.get("couleur") or "").strip() or None
     # Une lampe déjà allumée n'est pas dans « lumieres_eteintes » : sans ce deuxième passage, « toutes les lumières
     # à 10 % » ne faisait rien du tout quand elles étaient allumées, et Bulle annonçait quand même le changement
     # (vu le 21/09). Régler la luminosité, c'est agir sur TOUTES les lampes.
-    cles = ["lumieres_eteintes"] + (["lumieres_allumees"] if lum is not None else [])
+    # une lampe déjà allumée n'est pas dans « lumieres_eteintes » : sans ce deuxième passage, « toutes les
+    # lumières en rouge » ne faisait rien du tout quand elles étaient allumées (même piège que la luminosité)
+    cles = ["lumieres_eteintes"] + (["lumieres_allumees"] if (lum is not None or coul) else [])
     faits, rates = [], []
     for cle in cles:
-        f, r = await _lumieres(ctx, cle, "allumer", {"luminosite_pct": lum})
+        f, r = await _lumieres(ctx, cle, "allumer", {"luminosite_pct": lum, "couleur": coul})
         faits += f; rates += r
     if not faits and not rates:
         return ctx.ok(fait="les lumières étaient déjà toutes allumées")
-    fait = _compte(faits, "allumée") + (f", à {lum} %" if lum is not None else "")
+    fait = _compte(faits, "allumée") + (f", en {coul}" if coul else "") + (f", à {lum} %" if lum is not None else "")
     return ctx.ok(fait=fait, non_fait=[f"pas pu allumer : {', '.join(rates)}"] if rates else [])
 
 

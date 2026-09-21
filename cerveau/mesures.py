@@ -53,6 +53,17 @@ def echange(source, secondes, premiere_phrase=None):
         _c("bulle_premieres_phrases_total", source=source)
 
 
+def premier_son(secondes):
+    """Le délai que Greg RESSENT : de la fin de son énoncé au premier son qui sort de la TV.
+
+    Distinct de `premiere_phrase`, qui ne compte que le modèle : celui-ci ajoute la transcription en amont et la
+    synthèse de la première phrase en aval. C'est le seul des deux qu'on puisse citer en public sans tricher —
+    personne dans un salon ne chronomètre une file d'attente interne (21/09).
+    """
+    _c("bulle_premier_son_secondes_total", float(secondes))
+    _c("bulle_premiers_sons_total")
+
+
 def ignore(raison):
     """Un énoncé entendu qui n'était pas pour Bulle. On ne compte QUE la raison — voir l'en-tête."""
     _c("bulle_enonces_ignores_total", raison=raison if raison in RAISONS else "autre")
@@ -136,7 +147,9 @@ def modele(nom):
 AIDE = {
     "bulle_echanges_total": ("Échanges menés à terme, par source (voix, texte, banc de tests)", "counter"),
     "bulle_reponse_secondes_total": ("Temps cumulé des réponses complètes (à diviser par bulle_echanges_total)", "counter"),
-    "bulle_premiere_phrase_secondes_total": ("Temps cumulé jusqu'à la première phrase dite", "counter"),
+    "bulle_premiere_phrase_secondes_total": ("Temps cumulé jusqu'à la première phrase mise en file (modèle seul)", "counter"),
+    "bulle_premier_son_secondes_total": ("Temps cumulé de la fin de l'énoncé au premier son (transcription + modèle + synthèse)", "counter"),
+    "bulle_premiers_sons_total": ("Énoncés ayant abouti à un son", "counter"),
     "bulle_premieres_phrases_total": ("Réponses ayant produit au moins une phrase", "counter"),
     "bulle_enonces_ignores_total": ("Énoncés entendus mais écartés, par raison (rien du texte n'est conservé)", "counter"),
     "bulle_etape_secondes_total": ("Temps de calcul emprunté au GPU par étape (transcription, réflexion, synthèse)", "counter"),

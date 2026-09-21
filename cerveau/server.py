@@ -628,6 +628,27 @@ def _est_indice(brut):
 
 
 # ---------------------------------------------------------------- une conversation
+def _sans_redite(history, text, seuil=0.86):
+    """L'historique, privé du dernier échange s'il répondait DÉJÀ à la question qu'on repose.
+
+    Greg redemande la météo deux minutes plus tard : le modèle retrouvait sa réponse dans l'historique et la
+    resservait au mot près, sans rappeler l'outil — donc sans carte, et avec une température périmée (vu le
+    21/09 à 18h45, et c'est aussi le « tu répètes deux fois les mêmes réponses » du 20/09). Reposer une question
+    veut dire « vérifie », pas « répète ». On ne coupe QUE la paire concernée : le reste du fil sert encore aux
+    questions de suite (« et demain ? »).
+    """
+    if len(history) < 2 or history[-2].get("role") != "user":
+        return history
+    avant = (history[-2].get("content") or "").strip().lower()
+    apres = (text or "").strip().lower()
+    if not avant or not apres:
+        return history
+    if difflib.SequenceMatcher(None, avant, apres).ratio() < seuil:
+        return history
+    log.info("question reposée (« %s ») : on retire la réponse précédente du fil", apres[:60])
+    return history[:-2]
+
+
 class Session:
     def __init__(self, ws: WebSocket):
         self.ws, self.history, self.last = ws, [], time.time()
@@ -635,6 +656,7 @@ class Session:
         self.awake_next, self.sim, self.dernier_echange = False, False, None
         self.signaux, self.derniere_reponse = {}, 0.0    # signaux non verbaux du dernier énoncé, et quand Bulle a fini de parler
         self.muette = False          # vrai dès que la synthèse vocale a échoué : on n'annonce la panne qu'une fois
+        self.t_recu, self.son_mesure = 0.0, True   # arrivée de l'énoncé, et si son délai jusqu'au son est déjà compté
 
     async def send(self, obj=None, data=None):
         async with self.send_lock:
@@ -668,6 +690,9 @@ class Session:
                 r = await http.post(TTS, json=body)
                 r.raise_for_status()
                 mesures.etape("synthese", time.time() - t0); mesures.caracteres_dits(len(s))
+                if not self.son_mesure:      # le délai ressenti : de la fin de l'énoncé au premier son
+                    self.son_mesure = True
+                    mesures.premier_son(time.time() - self.t_recu)
                 await self.send({"type": "sentence", "text": s}, r.content)
             except Exception as e:
                 # Sans ça, le client ne reçoit RIEN : ni son, ni texte, ni erreur — Bulle paraît cassée alors
@@ -713,7 +738,8 @@ class Session:
         if time.time() - self.last > regles.c("oubli_apres_s", 600): self.history = []
         self.last = time.time()
         await tools.load()
-        msgs = [{"role": "system", "content": await system_prompt(self.sim)}] + self.history + [{"role": "user", "content": text}]
+        msgs = [{"role": "system", "content": await system_prompt(self.sim)}] + _sans_redite(self.history, text) \
+            + [{"role": "user", "content": text}]
         q: asyncio.Queue = asyncio.Queue()
         worker = asyncio.create_task(self.speak_worker(q))
         t0, final, emotion_sent, emotion, trace = time.time(), "", False, "neutre", []
@@ -801,6 +827,17 @@ class Session:
                     await dire(final)
                     trace.append({"nom": "__reponse_vide__", "ok": False})
                 break
+        except (httpx.TimeoutException, httpx.RequestError) as e:
+            # La 3090 et ses 8 cœurs sont partagés : une indexation lancée ailleurs peut les prendre plusieurs
+            # minutes, et Bulle dépassait alors son délai SANS RIEN DIRE — le client affichait une mine désolée
+            # et le salon voyait un visage figé (21/09 : « Bulle semble être coincée »). Une panne se dit.
+            log.warning("le modèle n'a pas répondu (%s) : %s", type(e).__name__, e)
+            mesures.etape("reflexion", time.time() - t_llm, mode=mode, ok=False)
+            final = regles.c("phrase_debordee",
+                             "Je suis débordée, la machine est prise. Redemande-moi dans un instant.")
+            if not emotion_sent: await self.send({"type": "emotion", "emotion": "desole"})
+            await dire(final)
+            trace.append({"nom": "__modele_muet__", "args": {"erreur": type(e).__name__}, "ok": False})
         finally:
             await q.put(None)
             await worker
@@ -871,6 +908,7 @@ async def ws_endpoint(ws: WebSocket):
             if msg.get("type") == "websocket.disconnect": break
             try:
                 if msg.get("bytes"):
+                    s.t_recu, s.son_mesure = time.time(), False
                     t0 = time.time()
                     brut, conf = await s.transcribe(msg["bytes"])
                     if conf is not None: mesures.confiance(conf)

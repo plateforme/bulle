@@ -25,6 +25,8 @@ cas:
   - {phrase: "Ouvre toutes les lumières de la maison.", outil: allumer_tout, interdits: [eteindre_tout], origine: "journal 19/09"}
   - {phrase: "Allume la lumière.", outil: allumer, args: {nom: "~salon"}, origine: "journal 19/09 (lumière par défaut = salon)"}
   - {phrase: "Mets toutes les lumières à 10 %.", outil: allumer_tout, args: {luminosite_pct: 10}, interdits: [eteindre_tout], origine: "journal 21/09 (ne faisait rien si elles étaient déjà allumées)"}
+  - {phrase: "Mets toutes les lumières en rouge.", outil: allumer_tout, args: {couleur: "~rouge"}, interdits: [eteindre_tout, lancer_scene], origine: "retours de Greg des 20 et 21/09 (trois fois : « je ne sais pas changer la couleur »)"}
+  - {phrase: "Passe la lampe du salon en bleu.", outil: allumer, args: {nom: "~salon", couleur: "~bleu"}, interdits: [allumer_tout], origine: "retours de Greg (couleur d une seule lampe)"}
   - {phrase: "Est-ce que la lampe du salon est allumée ?", aucun_outil: true, interdits: [allumer, eteindre], origine: "journal 19/09"}
 
   # --- memoire longue (ce que Greg demande explicitement de retenir)

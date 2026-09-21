@@ -143,3 +143,40 @@ def test_un_numero_civique_seul_n_est_pas_un_nom(service):
 def test_un_vrai_nom_de_lieu_est_garde_tel_quel(service):
     service([VITRERIE])
     assert plan.geocoder("Vitrerie Olympique", MAISON)["nom"] == "Vitrerie Olympique"
+
+
+# ---------------------------------------------------------------- catégorie ou nom propre ?
+def test_un_nom_propre_qui_contient_un_mot_de_categorie_reste_un_nom():
+    """« musée McCord » partait en recherche de musées alentour : le bon musée revenait SANS son adresse, et
+    plus rien du tout quand Overpass boudait — la même demande marchait ou pas selon la minute (21/09)."""
+    assert plan.categorie("musée McCord à Montréal", "Montréal") is None
+    assert plan.categorie("Hôtel du Parlement à Québec", "Montréal") is None
+    assert plan.categorie("Café Olimpico", "Montréal") is None
+
+
+def test_une_demande_generique_reste_une_categorie():
+    """La contrepartie : sans nom, c'est bien un commerce qu'on cherche autour de soi."""
+    assert plan.categorie("trouve-moi une pharmacie", "Montréal") == "amenity=pharmacy"
+    assert plan.categorie("une pharmacie ouverte près d'ici", "Montréal") == "amenity=pharmacy"
+    assert plan.categorie("le dépanneur du coin", "Montréal") == "shop=convenience"
+
+
+def test_un_determinant_indefini_annonce_une_categorie_malgre_un_adjectif():
+    """« UN restaurant italien » : « italien » distingue le genre de commerce, pas un établissement."""
+    assert plan.categorie("un restaurant italien", "Montréal") == "amenity=restaurant"
+    assert plan.categorie("un hôtel pas cher", "Montréal") == "tourism=hotel"
+
+
+def test_la_ville_de_reference_ne_rend_pas_une_demande_distinctive():
+    """Sans ça, « une pharmacie à Montréal » passerait pour le nom d'un lieu."""
+    assert plan.categorie("une pharmacie à Montréal", "Montréal") == "amenity=pharmacy"
+    assert plan.categorie("pharmacie Montréal", "Montréal") == "amenity=pharmacy"
+
+
+def test_la_recherche_par_nom_ne_passe_pas_par_overpass(service, monkeypatch):
+    """Un nom propre doit aller chez Nominatim : c'est lui qui rend une adresse, Overpass n'en a pas toujours."""
+    appels = []
+    monkeypatch.setattr(plan, "proche", lambda tag, autour: appels.append(tag))
+    service([VITRERIE])
+    plan.geocoder("musée McCord à Montréal", MAISON, "Montréal")
+    assert appels == []

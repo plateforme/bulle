@@ -127,3 +127,30 @@ def test_le_cerveau_sert_les_mesures_sans_jeton():
     source = open(server.__file__, encoding="utf-8").read()
     bloc = source.split('@app.get("/metrics"')[1].split("@app.get")[0]
     assert "jeton_valide" not in bloc
+
+
+# ---------------------------------------------------------------- le délai qu'on peut citer en public
+def test_le_delai_ressenti_est_distinct_du_temps_du_modele():
+    """`premiere_phrase` s'arrête quand la phrase entre dans la file : ni la transcription en amont, ni la
+    synthèse en aval n'y sont. Citer ce chiffre comme « le temps avant qu'elle parle » serait faux — et c'est
+    exactement ce qu'un lecteur comprendrait (relevé le 21/09 en préparant la publication)."""
+    mesures.echange("voix", 5.0, 1.6)
+    mesures.premier_son(4.3)
+    t = mesures.rendu()
+    assert valeur(t, 'bulle_premiere_phrase_secondes_total{source="voix"}') == 1.6
+    assert valeur(t, "bulle_premier_son_secondes_total") == 4.3
+    assert valeur(t, "bulle_premiers_sons_total") == 1
+
+
+def test_le_delai_ressenti_se_cumule_pour_faire_une_moyenne():
+    for d in (3.0, 4.0, 5.0):
+        mesures.premier_son(d)
+    t = mesures.rendu()
+    assert valeur(t, "bulle_premier_son_secondes_total") == 12
+    assert valeur(t, "bulle_premiers_sons_total") == 3
+
+
+def test_les_deux_series_sont_documentees():
+    """Une serie sans HELP ni TYPE n'est pas lisible par qui reprend le tableau de bord."""
+    assert "bulle_premier_son_secondes_total" in mesures.AIDE
+    assert "bulle_premiers_sons_total" in mesures.AIDE

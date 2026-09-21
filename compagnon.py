@@ -163,6 +163,7 @@ class SileroVAD:
         return float(out[0][0])
 WINDOW = 15.0                          # s d'écoute sans « Bulle » après une réponse (fenêtre de conversation)
 HOLD = 2.5                             # s pendant lesquelles l'émotion de la réponse reste affichée
+DESOLE_S = 12.0                        # s pendant lesquelles la mine désolée d'une panne reste affichée
 
 
 class FaceLink:
@@ -441,7 +442,7 @@ async def run(a):
     player = Player(face, a.out_device)
     state = {"waiting": False, "listening": False, "last": time.time(), "emotion": None, "fstate": None,
              "awake_until": 0.0, "present": None, "absent_since": 0.0, "nuit": None, "nuit_manuel": None,
-             "coupe": False}
+             "coupe": False, "emotion_jusqu": 0.0}
     reg_nuit = _nuit_reglages()
 
     def appliquer_nuit(actif, manuel=False):
@@ -455,7 +456,14 @@ async def run(a):
         print("mode nuit" if actif else "mode jour", flush=True)
     awake = lambda: time.time() < state["awake_until"]
 
-    def set_emotion(e):   # ce que ressent Bulle (neutre, joie, desole… ; étiquettes du LLM acceptées)
+    def set_emotion(e, duree=None):
+        """Ce que ressent Bulle (neutre, joie, desole… ; étiquettes du LLM acceptées).
+
+        `duree` = émotion PASSAGÈRE, effacée après ce délai. Sans ça, la tête des mauvais jours restait à
+        l'écran jusqu'à la conversation suivante : une panne de deux minutes et Bulle boudait toute l'après-midi
+        (21/09, Greg : « il fait la gueule depuis tout à l'heure »).
+        """
+        state["emotion_jusqu"] = time.time() + duree if duree else 0.0
         if state["emotion"] != e:
             state["emotion"] = e; face.send(emotion=e)
 
@@ -509,7 +517,9 @@ async def run(a):
                     print("       (carte :", ((d.get("carte") or {}).get("gabarit") or "effacée") + ")")
                     face.send(carte=d.get("carte"))
                 elif t == "sentence": print("IA   :", d["text"])
-                elif t == "error": print("erreur :", d["message"]); set_emotion("desole"); set_fstate("idle")
+                elif t == "error":
+                    # la mine désolée dit la panne, mais elle ne doit pas s'installer : elle s'efface seule
+                    print("erreur :", d["message"]); set_emotion("desole", duree=DESOLE_S); set_fstate("idle")
                 elif t == "done": state["waiting"], state["coupe"] = False, False
                 state["last"] = time.time()
 
@@ -574,6 +584,9 @@ async def run(a):
             """
             while True:
                 face.send(lien=True)
+                # une émotion passagère (la mine d'une panne) s'efface ici, mais jamais pendant que Bulle parle
+                if state["emotion_jusqu"] and time.time() > state["emotion_jusqu"] and not player.busy():
+                    set_emotion("sommeil" if state["nuit"] else "neutre")
                 await asyncio.sleep(5)
 
         lis_ref = []
