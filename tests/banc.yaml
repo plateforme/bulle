@@ -1,0 +1,97 @@
+# Banc de tests de Bulle — le juge de l'agent local. Chaque cas est une phrase réelle (souvent tirée des journaux)
+# rejouée en MODE SIMULATION : aucun effet sur la maison, on vérifie seulement le choix d'outil et ses paramètres.
+#
+#   outil        : outil attendu (un seul nom, ou une liste = l'un d'eux)
+#   args         : paramètres attendus ; "~texte" = contient (sans accents ni casse), sinon égalité
+#   interdits    : outils qui ne doivent PAS être appelés
+#   aucun_outil  : true = aucune action (lecture ou rien) attendue ; seuls les outils en lecture seule sont tolérés
+#   reponse      : "~texte" que la réponse parlée doit contenir
+#   reponse_sans : "~texte" que la réponse parlée ne doit PAS contenir
+#   carte        : gabarit attendu sur la TV (liste | cles | media | texte), ou "aucune"
+#   origine      : d'où vient le cas (journal du jj/mm, retour de Greg, incident n°…)
+#
+# L'agent AJOUTE un cas à chaque incident corrigé (le cas doit échouer avant la correction et passer après).
+
+cas:
+  # --- panneau LED / mode club
+  - {phrase: "Mets le mode club sur le panneau LED.", outil: mode_club, args: {actif: true}, interdits: [allumer_tout, allumer, lancer_scene], origine: "journal 19/09"}
+  - {phrase: "Tu serais capable de mettre le mode club sur le LED ?", outil: mode_club, interdits: [allumer_tout, allumer, lancer_scene], origine: "journal 19/09 (avait tout allumé)"}
+  - {phrase: "Mets le mode club en palette blanche.", outil: mode_club, args: {palette: "~blan"}, origine: "journal 19/09"}
+  - {phrase: "Mets le mode club avec le style étincelle.", outil: mode_club, args: {style: "~tincel"}, origine: "journal 19/09"}
+  - {phrase: "Coupe le mode club.", outil: mode_club, args: {actif: false}, origine: "journal 19/09"}
+
+  # --- lumières
+  - {phrase: "Ferme les lumières.", outil: [eteindre_tout, eteindre], interdits: [allumer, allumer_tout], origine: "journal 19/09 (québécois : fermer = éteindre)"}
+  - {phrase: "Ouvre toutes les lumières de la maison.", outil: allumer_tout, interdits: [eteindre_tout], origine: "journal 19/09"}
+  - {phrase: "Allume la lumière.", outil: allumer, args: {nom: "~salon"}, origine: "journal 19/09 (lumière par défaut = salon)"}
+  - {phrase: "Mets toutes les lumières à 10 %.", outil: allumer_tout, args: {luminosite_pct: 10}, interdits: [eteindre_tout], origine: "journal 21/09 (ne faisait rien si elles étaient déjà allumées)"}
+  - {phrase: "Est-ce que la lampe du salon est allumée ?", aucun_outil: true, interdits: [allumer, eteindre], origine: "journal 19/09"}
+
+  # --- memoire longue (ce que Greg demande explicitement de retenir)
+  - {phrase: "Retiens que je suis allergique aux arachides.", outil: retenir, args: {fait: "~arachide"}, origine: "memoire longue 21/09"}
+  - {phrase: "Souviens-toi que la poubelle sort le mardi soir.", outil: retenir, args: {fait: "~mardi"}, origine: "memoire longue 21/09"}
+  - {phrase: "Qu'est-ce que tu sais de moi ?", outil: lister_souvenirs, interdits: [retenir], origine: "memoire longue 21/09"}
+  - {phrase: "Oublie que je suis allergique aux arachides.", outil: oublier, interdits: [retenir], origine: "memoire longue 21/09"}
+  # « n'oublie pas de… » est un RAPPEL, pas un souvenir : les deux familles se ressemblent trop pour qu'on
+  # laisse le modele choisir sans un cas qui les oppose.
+  - {phrase: "N'oublie pas de sortir les poubelles demain matin.", outil: creer_rappel, interdits: [retenir, oublier], origine: "memoire longue 21/09"}
+
+  # --- musique
+  - {phrase: "Joue mes titres likés.", outil: jouer_favoris, interdits: [commande_media], origine: "journal 19/09"}
+  - {phrase: "Joue ma playlist des titres favoris.", outil: jouer_favoris, interdits: [commande_media], origine: "journal 19/09"}
+  - {phrase: "Joue Instant Death dans mes titres likés.", outil: jouer_morceau, args: {titre: "~instant"}, interdits: [commande_media], origine: "journal 19/09"}
+  - {phrase: "Mets ma playlist electronic jazz.", outil: jouer_playlist, args: {nom: "~jazz"}, interdits: [commande_media], origine: "journal 19/09"}
+  - {phrase: "Joue Daft Punk.", outil: [play_search, jouer_morceau], interdits: [commande_media], origine: "journal 19/09"}
+  - {phrase: "Joue.", outil: play, interdits: [play_search, jouer_morceau, jouer_favoris, jouer_playlist], origine: "incident 20/09 : « Joue. » seul partait en recherche vide (400) puis annonçait un titre inventé"}
+  # « C'est parti. » hors contexte est ambigu : on n'exige pas play (le banc part sans musique en cours),
+  # on vérifie seulement que Bulle ne lance rien que Greg n'a pas nommé (incident 20/09 ×3 : elle répondait
+  # « je ne sais pas comment jouer le premier titre liké », un but qu'elle avait inventé).
+  - {phrase: "C'est parti.", interdits: [play_search, jouer_morceau, jouer_favoris, jouer_playlist, commande_media], origine: "incident 20/09 ×3"}
+  - {phrase: "Like ce titre.", outil: liker_morceau, origine: "journal 19/09"}
+  - {phrase: "Arrête la musique.", outil: pause, interdits: [commande_media], origine: "journal 19/09 (était emballé dans twenty)"}
+  - {phrase: "Morceau suivant.", outil: next_track, interdits: [commande_media], origine: "journal 19/09"}
+  - {phrase: "Augmente le volume de 10 %.", outil: volume_musique, args: {changement: 10}, interdits: [commande_media], origine: "journal 19/09 (avait réglé à 10 %)"}
+  - {phrase: "Baisse un peu le volume.", outil: volume_musique, interdits: [commande_media], origine: "journal 19/09"}
+  - {phrase: "Mets le volume de la musique à 40.", outil: volume_musique, args: {niveau: 40}, interdits: [commande_media], origine: "journal 19/09"}
+
+  # --- mode nuit
+  - {phrase: "Bonne nuit Bulle.", outil: mode_nuit, args: {actif: true}, interdits: [eteindre_tout, mode_club], origine: "mode nuit 19/09"}
+  - {phrase: "Passe en mode nuit.", outil: mode_nuit, args: {actif: true}, origine: "mode nuit 19/09"}
+  - {phrase: "Sors du mode nuit.", outil: mode_nuit, args: {actif: false}, origine: "mode nuit 19/09"}
+
+  # --- lieux et trajets
+  - {phrase: "Localise-moi la vitrerie olympique à Montréal.", outil: lieu, args: {recherche: "~vitrerie"}, origine: "journal 21/09 (refusait : « je ne sais pas localiser »)"}
+  - {phrase: "Montre-moi l'itinéraire pour aller au Stade olympique.", outil: itineraire, args: {destination: "~olympique"}, origine: "journal 21/09 (capacité absente)"}
+  - {phrase: "Envoie-moi sur mon téléphone le trajet jusqu'à la Place des Arts.", outil: itineraire, args: {destination: "~place des arts", envoyer_telephone: true}, origine: "journal 19/09 et 21/09"}
+  - {phrase: "Depuis la maison, comment je vais à la Place des Arts ?", outil: itineraire, args: {destination: "~place des arts"}, origine: "journal 21/09 (« ma maison » géocodé au hasard : itinéraire parti de 3 km de là)"}
+
+  # --- informations
+  - {phrase: "Combien de tâches j'ai en retard dans le CRM ?", outil: twenty_execute_tool, args: {toolName: "~find"}, origine: "journal 19/09"}
+  - {phrase: "Quel temps fait-il aujourd'hui ?", outil: [meteo_actuelle, previsions], origine: "journal 19/09"}
+  - {phrase: "Quelle heure est-il ?", aucun_outil: true, reponse: "~il est", origine: "journal 19/09"}
+
+  # --- cartes sur la TV (ce que la voix dit mal) — voir cerveau/cartes.py
+  - {phrase: "Quel temps il fait ?", outil: meteo_actuelle, carte: cles, origine: "cartes v1 : chiffres illisibles à l'oreille"}
+  - {phrase: "C'est quoi la météo des trois prochains jours ?", outil: previsions, carte: cles, origine: "cartes v1"}
+  - {phrase: "Comment ça s'écrit, Kyutai ?", outil: afficher, args: {mot: "~kyutai"}, carte: texte, origine: "cartes v1 : orthographe"}
+  - {phrase: "Quelle heure est-il ?", carte: aucune, reponse: "~il est", origine: "cartes v1 : la voix suffit, pas d'écran"}
+  - {phrase: "Éteins la lampe du salon.", outil: eteindre, carte: aucune, origine: "cartes v1 : une action ne s'affiche pas"}
+  - {phrase: "Liste-moi les tâches que j'ai à faire.", outil: twenty_execute_tool, carte: liste, origine: "retour de Greg 19/09 : la liste était dite à l'oral, sans carte"}
+
+  # --- journal du 20/09 (matin)
+  - {phrase: "Liste-moi les tâches que j'ai à faire la semaine prochaine.", outil: twenty_execute_tool, carte: liste, origine: "journal 20/09 : « Filter for field dueAt must have exactly one operator »"}
+  - {phrase: "Joue Miles Davis.", outil: [jouer_morceau, play_search], reponse_sans: "~il est", origine: "journal 20/09 : toutes les réponses commençaient par « Il est 08:56 »"}
+  - {phrase: "Quelle météo aujourd'hui à Montréal ?", outil: meteo_actuelle, carte: cles, reponse_sans: "~km h", origine: "journal 20/09 : disait « vent 5,2 km h⁻¹ »"}
+  - {phrase: "Nomme-moi les cinq derniers pays qui ont gagné la coupe du monde de football.", aucun_outil: true, reponse_sans: "~je ne sais pas", origine: "journal 20/09 : refusait de répondre de mémoire"}
+
+  # --- lieux sur un plan
+  - {phrase: "Où est la Place des Arts ?", outil: lieu, carte: lieu, origine: "cartes : un lieu se montre, il ne se dit pas"}
+  - {phrase: "C'est où, le Stade olympique ?", outil: lieu, carte: lieu, origine: "cartes : formulation québécoise"}
+  - {phrase: "Mets de la musique.", interdits: [lieu], origine: "cartes : le plan ne doit pas se déclencher à tort"}
+  - {phrase: "Arrête toutes les lumières.", outil: eteindre_tout, interdits: [allumer_tout, allumer], origine: "journal 20/09 10 h 31 : échouait en 500 (entity_id all)"}
+
+  # --- réglages à la voix
+  - {phrase: "Garde les cartes trente secondes.", outil: reglage, origine: "réglages à la voix"}
+  - {phrase: "Mets le volume maximum de la musique à 70.", outil: reglage, origine: "réglages à la voix"}
+  - {phrase: "C'est quoi la durée des cartes ?", outil: reglage, origine: "réglages à la voix : lecture"}
+  - {phrase: "Change la couleur de ton visage en rouge.", interdits: [reglage], origine: "réglages à la voix : ne pas inventer un réglage"}

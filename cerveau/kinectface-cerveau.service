@@ -1,0 +1,13 @@
+[Unit]
+Description=Cerveau du compagnon TV (Kinect + visage) : Whisper -> LLM + outils -> Kyutai
+After=network-online.target ollama.service stt-gateway.service kyutai-tts.service
+
+[Service]
+User=plateforme
+WorkingDirectory=/home/plateforme/kinectface/depot/cerveau
+EnvironmentFile=/home/plateforme/.config/opencode/mcp.env
+ExecStart=/home/plateforme/kinectface/venv/bin/uvicorn server:app --host 0.0.0.0 --port 8802
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

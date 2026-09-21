@@ -1,0 +1,14 @@
+[Unit]
+Description=Suivi Kinect de Bulle : regard vers la personne + présence
+After=kinectface-face.service
+
+[Service]
+User=plateforme
+WorkingDirectory=/home/plateforme/kinectface
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /home/plateforme/kinectface/tracker.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

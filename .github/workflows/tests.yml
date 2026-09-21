@@ -1,0 +1,39 @@
+# Intégration continue de Bulle, sur le miroir GitHub.
+#
+# Tout ce qui tourne ici doit marcher SANS jeton, SANS réseau vers la maison, SANS carte graphique et SANS
+# matériel : pas de LLM, pas de Kinect, pas de Home Assistant. C'est la contrainte qui garde la CI honnête —
+# un test qui a besoin de la maison n'a rien à faire ici, il va dans tests/banc.yaml.
+#
+# Les mêmes trois commandes se lancent à la main sur la VM, et l'orchestrateur de nuit les rejoue avant de
+# valider une branche de l'agent : un seul jeu de règles, qu'on ne peut pas faire diverger.
+
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"        # la version du venv de la VM et du Pi
+          cache: pip
+
+      - name: Dépendances
+        run: pip install -r tests/requirements.txt ruff
+
+      - name: Fichiers YAML (syntaxe et structure)
+        run: python outils/valider.py
+
+      - name: Erreurs de syntaxe et noms indéfinis
+        # volontairement étroit : le style du dépôt (lignes longues, français) n'est pas négociable par un linter
+        run: ruff check --select=E9,F --output-format=concise .
+
+      - name: Tests unitaires
+        run: pytest

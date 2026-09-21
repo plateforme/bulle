@@ -1,0 +1,17 @@
+[Unit]
+Description=Visage de Bulle sur la TV (pygame / KMS)
+# Conflicts= arrête la getty mais n'attend pas qu'elle soit arrêtée : sans l'ordre, le visage peut réclamer
+# l'écran KMS pendant que la console le tient encore.
+After=systemd-user-sessions.service getty@tty1.service
+Conflicts=getty@tty1.service
+
+[Service]
+User=plateforme
+WorkingDirectory=/home/plateforme/kinectface
+Environment=SDL_VIDEODRIVER=kmsdrm
+ExecStart=/usr/bin/python3 /home/plateforme/kinectface/face.py --res 1280x720 --stats 15
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Bulle : boucle nocturne locale (analyse, agent OpenCode en branches, validation)
+After=kinectface-cerveau.service ollama.service
+
+[Service]
+Type=oneshot
+User=plateforme
+WorkingDirectory=/home/plateforme/kinectface/depot
+ExecStart=/bin/bash -c '/home/plateforme/kinectface/venv/bin/python agent/boucle.py >> /home/plateforme/kinectface/etat/logs/nuit-$(date +%%F).log 2>&1'
+TimeoutStartSec=4h
+Nice=5

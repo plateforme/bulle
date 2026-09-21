@@ -1,0 +1,238 @@
+# Base de pannes connues de Bulle — « symptôme → diagnostic → remède ».
+# L'analyste nocturne rapproche chaque incident de ces fiches (champ `detection`) ; l'agent local s'en sert pour
+# corriger. Niveaux : auto (l'agent corrige seul, banc de tests à l'appui) | propose (l'agent prépare, Greg valide)
+# | humain (action physique ou réglage d'un appareil : l'agent explique quoi faire).
+# L'agent AJOUTE une fiche après chaque correction réussie d'un problème nouveau.
+
+pannes:
+  - id: outil-approchant
+    symptome: "Bulle utilise un outil qui ne correspond pas à la demande (ex. : « mode club » → allumer toutes les lumières) et annonce une action qui n'a pas eu lieu."
+    detection: {incident: [outil_inattendu, retour_negatif]}
+    diagnostic: "Le LLM choisit l'outil le plus proche quand aucun ne correspond, ou quand la description d'un outil est trop large."
+    remede: "Préciser la description de l'outil concerné (outils_composes.py) ou ajouter une consigne dans config/regles.yaml (cerveau.consignes) ; ajouter un cas au banc avec l'outil fautif dans `interdits`."
+    niveau: auto
+    zone: [config/regles.yaml, cerveau/outils_composes.py, tests/banc.yaml]
+
+  - id: outil-emballe
+    symptome: "Appel du type twenty_execute_tool(toolName=\"pause\") ou nom déformé (« twelve_execute_tool », « twelve? »)."
+    detection: {incident: [outil_redirige, outil_inconnu]}
+    diagnostic: "La description de l'aiguillage Twenty (dans le préréglage Open WebUI) fait croire au LLM que c'est un aiguillage universel."
+    remede: "Déjà redirigé automatiquement par le cerveau. Si fréquent : ajouter une consigne « twenty_execute_tool ne sert qu'au CRM Twenty »."
+    niveau: auto
+    zone: [config/regles.yaml]
+
+  - id: nom-mal-transcrit
+    symptome: "Phrase ignorée (« pas pour moi ») alors que Greg a dit « Bulle » : Whisper écrit « Boule, », « Beautiful. », « Il met… »."
+    detection: {incident: [ignore_nom_probable]}
+    diagnostic: "Nom court prononcé de loin ; Whisper le remplace par un mot proche."
+    remede: "Ajouter la graphie à cerveau.nom_mal_entendu (acceptée seulement en début de phrase suivie d'une ponctuation) ou à cerveau.nom_variantes si elle est sans ambiguïté ; ajouter un exemple à indice_stt."
+    niveau: auto
+    zone: [config/regles.yaml]
+
+  - id: voix-trop-faible
+    symptome: "Greg doit s'approcher du micro ; beaucoup de secondes avec une probabilité de parole entre 0,15 et 0,3."
+    detection: {incident: [parole_sous_seuil]}
+    diagnostic: "Micros Kinect bruts (pas de gain matériel ni de traitement du SDK Windows)."
+    remede: "Baisser client.vad_seuil_on par pas de 0,05 (plancher 0,2) ou monter client.vad_gain (plafond 30) ; vérifier qu'il n'y a pas de faux déclenchements en silence (parole < 0,05). Au-delà : micro USB avec traitement (ReSpeaker XVF3800) — niveau humain."
+    niveau: auto
+    zone: [config/regles.yaml]
+
+  - id: fenetre-trop-courte
+    symptome: "Greg enchaîne une question sans redire « Bulle » juste après la fin de la fenêtre : phrase ignorée."
+    detection: {incident: [ignore_juste_apres_reponse]}
+    diagnostic: "client.fenetre_conversation_s trop court."
+    remede: "Allonger client.fenetre_conversation_s par pas de 5 s (plafond 30)."
+    niveau: auto
+    zone: [config/regles.yaml]
+
+  - id: presence-clignote
+    symptome: "Le suivi annonce « quelqu'un est là » / « plus personne » toutes les ~10 s ; Bulle se réveille et s'endort en boucle."
+    detection: {incident: [presence_instable], sante: "suivi.bascules_presence > 4"}
+    diagnostic: "Personne assise à la limite de portée de la profondeur (~4 m, ex. le canapé), objet au sol, ou surface qui scintille."
+    remede: "Allonger suivi.absence_s (jusqu'à 30) ; monter suivi.hauteur_min_lignes ; si un objet précis est en cause : photo de diagnostic (pi/ghost_photo.py). Déplacer la Kinect = niveau humain."
+    niveau: auto
+    zone: [config/regles.yaml]
+
+  - id: kinect-mal-inclinee
+    symptome: "Le suivi voit surtout le plafond ou le sol ; personnes vues seulement en partie."
+    detection: {sante: "abs(suivi.inclinaison_deg) > 8"}
+    diagnostic: "Le moteur de la Kinect a été déplacé (à la main ou au branchement)."
+    remede: "Envoyer {\"inclinaison\": 0} sur le port UDP 5007 du Pi (outils/inclinaison.sh 0), puis vérifier le bilan suivant."
+    niveau: auto
+    zone: [commande]
+
+  - id: libfreenect-ancien
+    symptome: "« send_cmd: Input control transfer failed (18) » / « Failed to fetch zero plane info » au démarrage du suivi, en boucle."
+    detection: {journal: "Input control transfer failed|zero plane info|const shift"}
+    diagnostic: "Le suivi charge libfreenect 0.5.3 (Debian) au lieu de 0.7.5 (/opt/libfreenect). Un échec isolé juste après un mouvement du moteur est normal (la caméra se réénumère)."
+    remede: "Vérifier /etc/ld.so.conf.d/libfreenect-0.7.conf et `ldconfig -p | grep freenect_sync` ; recompiler 0.7.5 si absent. Touche au système du Pi."
+    niveau: propose
+    zone: [systeme-pi]
+
+  - id: gspca-kinect
+    symptome: "La caméra Kinect se déconnecte/reconnecte, la profondeur ne remonte pas."
+    detection: {journal: "gspca_main: kinect"}
+    diagnostic: "Le module noyau gspca_kinect a repris la caméra."
+    remede: "/etc/modprobe.d/kinect-freenect.conf doit contenir « blacklist gspca_kinect » ; rmmod gspca_kinect."
+    niveau: propose
+    zone: [systeme-pi]
+
+  - id: spotify-mcp-bug
+    symptome: "Erreur JavaScript renvoyée par un outil Spotify (« … is not a function », « Unexpected token … is not valid JSON »)."
+    detection: {incident: [outil_erreur], motif: "is not a function|not valid JSON|Unexpected (non-whitespace|token)"}
+    diagnostic: "Bug du serveur Spotify MCP (~/mcp/spotify-library-mcp, dépôt tiers) : réponse de Spotify d'un format inattendu."
+    remede: "Corriger dans une branche git de ~/mcp/spotify-library-mcp (src/tools.js, src/spotify.js), `node --check`, redémarrer spotify-mcp, vérifier tools/list. Garder un .bak. Exemples déjà corrigés : artists en texte (play_search), corps non JSON (pause)."
+    niveau: auto
+    zone: [depot-tiers-spotify]
+
+  - id: verbe-musique-sans-objet
+    symptome: "Une demande de musique sans objet (« Joue. », « Reprends. », « C'est parti. ») part en recherche vide (play_search avec query \"\" → Spotify 400 « No search query ») ou reçoit une réponse inventée (« je ne sais pas comment jouer le premier titre liké »), parfois suivie d'un titre annoncé alors qu'aucun outil ne l'a joué. À distinguer de spotify-mcp-bug : ici le serveur répond normalement, c'est l'appel qui part vide."
+    detection: {incident: [outil_erreur, capacite_manquante], motif: "play_search.*\"query\"\\s*:\\s*\"\"|No search query|premier titre liké"}
+    diagnostic: "Le LLM comble le vide de la phrase avec un but plausible tiré du contexte musical, puis l'annonce comme fait. Un verbe de lecture sans objet veut dire « reprends ce qui est en cours » : play sans argument."
+    remede: "Consigne dans cerveau.consignes (config/regles.yaml) : « joue », « reprends », « c'est parti » seuls = play sans argument, aucune recherche. Cas au banc (outil play, play_search et jouer_* interdits). Ne pas élargir à « c'est bon » ni « go » : ces formules arrivent surtout par le son de la TV et déclencheraient la musique toutes seules."
+    niveau: auto
+    zone: [config/regles.yaml, tests/banc.yaml]
+
+  - id: aucun-appareil-spotify
+    symptome: "« Aucun appareil Spotify actif »."
+    detection: {motif: "Aucun appareil Spotify actif"}
+    diagnostic: "Aucun appareil Spotify Connect actif ; le repli sur l'appareil par défaut a échoué (CXN100 éteint ?)."
+    remede: "Vérifier cerveau.musique.appareil_par_defaut ; sinon demander à Greg d'allumer le CXN100."
+    niveau: humain
+    zone: []
+
+  - id: volume-sans-effet
+    symptome: "Bulle dit avoir changé le volume, mais le son ne change pas."
+    detection: {retour: "volume", sante: "cxn100.volume_level == 0 et pas de VOLUME_SET"}
+    diagnostic: "Le CXN100 est en sortie à niveau fixe : le volume se règle sur l'ampli."
+    remede: "Greg active le mode préampli du CXN100 dans l'app StreamMagic (en baissant l'ampli avant). FAIT le 19/09/2026 : si le symptôme revient, vérifier que le mode préampli n'a pas été désactivé (media_player.cxn100_2 doit annoncer VOLUME_SET)."
+    niveau: humain
+    zone: []
+
+  - id: reponse-vide
+    symptome: "Bulle ne dit rien, ou « Pardon, je n'ai pas compris »."
+    detection: {incident: [reponse_vide]}
+    diagnostic: "Le LLM n'a produit ni outil ni texte (demande ambiguë ou transcription dégradée)."
+    remede: "Regarder la transcription ; si la demande était claire, ajouter une consigne ou un exemple et un cas au banc."
+    niveau: auto
+    zone: [config/regles.yaml, tests/banc.yaml]
+
+  - id: pi-chauffe
+    symptome: "Le Pi dépasse 80 °C ou bride sa fréquence (throttled ≠ 0x0)."
+    detection: {sante: "suivi.bride_part > suivi.pi_bride_part_max, ou pic 24 h > suivi.pi_temperature_max"}
+    diagnostic: "Pi 3 sans dissipateur ; charge du visage + suivi + Silero. Il vit entre 73 et 80 °C : seul le
+      BRIDAGE dit qu'il perd vraiment de la fréquence. Ne juger ni sur l'instantané (l'analyse tourne à 3 h,
+      quand il est froid — fiche journal-pi-volatile pour l'autre moitié de cet angle mort), ni sur les bits
+      hauts de get_throttled, collants depuis le démarrage."
+    remede: "Dissipateur/ventilateur (humain) ; en attendant : baisser la cadence du suivi (--hz)."
+    niveau: humain
+    zone: []
+
+  - id: declenchement-fantome
+    symptome: "Bulle répond sans qu'on lui ait rien demandé (ex. : trois météo non demandées le 19/09), ou des phrases toutes faites apparaissent dans les transcriptions."
+    detection: {incident: [hallucination_stt, declenchement_fantome]}
+    diagnostic: "Whisper recrache son indice (cerveau.indice_stt) mot pour mot quand l'audio est inexploitable : si l'indice contient une phrase qui ressemble à une demande (« Bulle, quel temps fait-il ? »), Bulle l'exécute. Une répétition triple de la même phrase est aussi un signe d'hallucination."
+    remede: "cerveau.indice_stt doit rester une LISTE DE MOTS (noms propres, vocabulaire), jamais une phrase d'exemple. Ajouter au besoin un motif dans cerveau.hallucinations (expressions régulières, texte sans accents) ; le cerveau ignore toute transcription CONTENUE dans l'indice (20/09 : « CXN100, Home Assistant, Montréal, mode club, titres likés », l'indice sans son premier mot, avait lancé la musique) ou répétée trois fois."
+    niveau: auto
+    zone: [config/regles.yaml]
+
+  - id: club-capteur-mort
+    symptome: "Le mode club ne démarre plus, ni à la voix ni depuis l'app Home Assistant, alors que input_boolean.led_club est à « on » ; les dalles gardent l'affichage normal."
+    detection: {sante: "led.club_on et led.anime_depuis_min > 5 (capteur sensor.led_club_tempo, republié chaque minute)", incident: [club_sans_capteur]}
+    diagnostic: "Dans l'afficheur (Pi LED .26), le fil de lecture du capteur piézo (UDP 4210) est mort : la file du port s'accumule sans être lue, `alive()` renvoie faux et le mode club conclut « capteur inactif ». Signe sûr : le processus src/app.py n'a plus que 3 fils au lieu de 4, et `ss -lunp | grep 4210` montre une file d'attente qui grossit. Vu le 19/09/2026 (corrigé depuis : le fil ne meurt plus sur une erreur imprévue, commit 4f9ac2d de LED_Matrix)."
+    remede: "Redémarrer l'afficheur : ssh plateforme@192.0.2.26 sudo systemctl restart afficheur, puis vérifier « mode club : actif » dans journalctl -u afficheur. Si ça se reproduit souvent, chercher l'erreur signalée par « club : erreur de lecture du capteur » dans les journaux du Pi LED."
+    niveau: auto
+    zone: [exploitation]
+
+  - id: journal-pi-volatile
+    symptome: "Le Pi a redémarré et il n'en reste AUCUNE trace : « journalctl --list-boots » ne connaît que le
+      démarrage en cours, « last reboot » est vide, et on ne peut pas dire si c'était la chaleur, l'alimentation
+      ou un programme."
+    detection: {journal: "journalctl --list-boots ne montre qu'une seule ligne"}
+    diagnostic: "Raspberry Pi OS livre /usr/lib/systemd/journald.conf.d/40-rpi-volatile-storage.conf avec
+      Storage=volatile, pour épargner la carte SD : le journal vit dans /run et disparaît à chaque redémarrage.
+      Et Debian 13 (trixie) n'alimente plus wtmp, donc « last reboot » ne dira jamais rien non plus. Les deux se
+      combinent : la machine peut redémarrer sans que personne ne le sache. Vu le 21/09/2026."
+    remede: "Surcharge dans /etc/systemd/journald.conf.d/50-bulle-persistant.conf : Storage=persistent,
+      Compress=yes, SystemMaxUse=200M, MaxRetentionSec=1month, SyncIntervalSec=5m. Puis « sudo systemctl restart
+      systemd-journald && sudo journalctl --flush ». Vérifier que /run/log/journal ne contient plus de .journal et
+      que /var/log/journal/<machine-id>/ en contient. ATTENTION : cette configuration vit sur la carte SD, hors du
+      dépôt — un reflash de la carte la perd et il faudra la reposer."
+    niveau: humain
+    zone: [exploitation]
+
+  - id: nuit-chantiers-expirent
+    symptome: "Les chantiers de la boucle de nuit expirent tous au bout de 1200 s (« timed out after 1200
+      seconds ») et la nuit ne produit aucune correction."
+    detection: {journal: "chantier .* en échec .* timed out after 1200 seconds, répété"}
+    diagnostic: "Une seule carte de 24 Go pour trois acteurs qui ne se parlent pas. Le modèle de l'agent
+      (qwen3.8:27b, 17,7 Go) ne tient pas à côté de celui de Bulle (gpt-oss, 13,8 Go), que `ia-warmup` épingle
+      avec keep_alive=-1 — et sa minuterie repasse TOUTES LES 30 MINUTES (OnUnitActiveSec=30min, malgré une
+      description qui annonce 90). Un chantier durant jusqu'à 20 min, il est toujours rattrapé. Ollama charge
+      alors une partie du modèle sur le processeur et tout devient dix à vingt fois plus lent. Le 21/09 :
+      32 couches sur 66 seulement sur la carte, 5 chantiers sur 6 expirés. `vram-arbitre` s'en mêle aussi en
+      redémarrant Kyutai. La preuve se lit dans « journalctl -u ollama | grep offloaded » : chercher un X/66
+      inférieur à 66."
+    remede: "La boucle arrête maintenant ia-warmup.timer pour la durée de la nuit et le remet à la fin (après
+      rechauffer_bulle, pour qu'il ne reparte pas pendant le réchauffage). Elle refuse aussi de commencer si la
+      carte n'a pas VRAM_AGENT_MIO de libre : mieux vaut une nuit blanche annoncée que trois heures de chantiers
+      perdus. Si ça recommence : vérifier qui occupe la carte avec nvidia-smi, et que la minuterie est bien
+      arrêtée pendant la nuit."
+    niveau: auto
+    zone: [agent/boucle.py]
+
+  - id: ha-403-banni
+    symptome: "Toutes les commandes maison échouent d'un coup (« Je ne sais pas comment éteindre les lumières ») ; les outils du serveur 8795 renvoient « Internal Server Error »."
+    detection: {incident: [outil_erreur], journal: "Internal Server Error sur eteindre_tout, allumer, etat_maison"}
+    diagnostic: "Home Assistant a banni l'IP du cerveau : curl sur http://192.0.2.15:8123/api/ renvoie 403 MÊME SANS JETON (un mauvais jeton donnerait 401). HA bannit après 5 échecs d'authentification (ip_ban_enabled, login_attempts_threshold: 5) et garde le bannissement en mémoire. CAUSE TROUVÉE le 20/09/2026 : ce n'était pas Bulle mais l'agent de nuit — OpenCode avait un serveur MCP Home Assistant configuré avec « Bearer {env:HA_TOKEN} », et bulle-nuit.service n'a pas d'EnvironmentFile, donc le jeton partait vide. Cinq chantiers dans la nuit = cinq échecs = bannissement à 03 h 39. Corrigé en désactivant ce serveur MCP (l'agent, déjà privé de bash et du web, n'a aucune raison de piloter la maison)."
+    remede: "Le journal est dans le conteneur, pas dans un fichier : qm guest exec 103 -- sh -c 'docker logs --since 24h homeassistant | grep -i ban' donne la ligne « Banned IP … » ET les tentatives qui l'ont précédée, avec l'URL demandée et le User-Agent du fautif — c'est ce qui identifie le coupable. Ensuite : retirer l'entrée de /config/ip_bans.yaml, puis `ha core restart` (le bannissement est en mémoire jusque-là). ATTENTION : chaque essai non authentifié pendant le diagnostic compte dans les 5. ACTION HUMAINE : lever un bannissement est une décision de Greg. NOTE : « logger: » dans configuration.yaml ne crée PAS de fichier de journal sur cette installation HAOS (il règle les niveaux, pas la destination) — c'est bien docker logs qu'il faut lire."
+    niveau: humain
+    zone: [exploitation]
+
+  - id: suivi-fige
+    symptome: "Les yeux ne suivent plus personne : le regard reste figé dans une direction, et Bulle croit qu'il y a toujours quelqu'un."
+    detection: {sante: "suivi.part_avec_personne > 0.95 et suivi.bascules_presence == 0 sur plusieurs bilans", incident: [suivi_fige]}
+    diagnostic: "Le fond du suivi est appris une fois pour toutes : un objet déplacé (meuble, sac, plante) reste au premier plan indéfiniment. La silhouette élue est alors toujours la même et la vraie personne n'est jamais retenue. Le bilan le montre : part_avec_personne = 1,0, bascules_presence = 0, personne_distance_m constante. Une photo de diagnostic (pi/ghost_photo.py) ne le reproduit PAS : elle réapprend le fond, donc elle est toujours propre."
+    remede: "Depuis le 21/09, le suivi absorbe de lui-même une silhouette figée plus de suivi.immobile_absorbe_s (180 s par défaut). Si le symptôme revient : baisser ce délai, ou redémarrer kinectface-tracker sur le Pi pour repartir d'un fond neuf."
+    niveau: auto
+    zone: [config/regles.yaml, exploitation]
+
+  - id: action-sans-effet
+    symptome: "Bulle annonce un changement qui n'a pas eu lieu (« la luminosité a été réduite à 10 % » alors que rien ne bouge)."
+    detection: {incident: [retour_negatif], motif: "deja|étaient déjà"}
+    diagnostic: "L'outil composé n'agit que sur une partie des appareils — typiquement ceux qui sont dans l'état opposé — et renvoie quand même « ok ». Vu le 21/09 : allumer_tout ne traitait que les lampes éteintes, donc régler la luminosité ne faisait rien quand elles étaient allumées."
+    remede: "Faire porter l'action sur toutes les cibles concernées quand un paramètre (luminosité, volume…) est donné, et dire dans « fait » ce qui a réellement changé ; ajouter un cas au banc avec le paramètre attendu."
+    niveau: auto
+    zone: [cerveau/outils_composes.py, tests/banc.yaml]
+
+  - id: carte-tue-le-visage
+    symptome: "Le visage disparaît et revient (l'écran clignote) juste au moment où une carte devrait s'afficher ; la carte, elle, ne s'affiche jamais."
+    detection: {journal_pi: "kinectface-face : Traceback ... in rendre", incident: [retour_negatif], motif: "s'affiche pas|rien ne s'affiche"}
+    diagnostic: "face.py appelait carte.rendre() sans filet dans sa boucle d'affichage : la moindre exception tuait le processus, que systemd relançait aussitôt — d'où le clignotement. Cas rencontré le 21/09 : un QR code écrit par segno arrive en palette 1 bit, et pygame.transform.smoothscale n'accepte que du 24 ou 32 bits."
+    remede: "Toute image passe par carte._mettre_a_echelle (qui convertit ce qui n'est pas en 24/32 bits), et face.py entoure carte.rendre d'un try/except qui écrit « carte non dessinée » et continue. Une carte ratée ne doit coûter que la carte."
+    niveau: auto
+    zone: [carte.py, face.py, cerveau/plan.py]
+
+  - id: notification-sans-lien
+    symptome: "La notification arrive bien sur le téléphone, mais la toucher ouvre le tableau de bord de Home Assistant au lieu de la page attendue."
+    detection: {incident: [retour_negatif], motif: "n'aboutit pas|ouvre le dashboard|tableau de bord"}
+    diagnostic: "L'appli companion n'ouvre une adresse que si on la lui passe dans « data » ; une URL collée dans le texte du message n'est qu'un texte. Vu le 21/09 avec l'itinéraire."
+    remede: "Passer l'adresse dans le champ « lien » de notifier_telephone (serveur maison), qui la met dans data.url (iOS) et data.clickAction (Android)."
+    niveau: auto
+    zone: [cerveau/outils_composes.py]          # le champ « lien » vit hors du dépôt : /home/plateforme/tools/maison/server.py sur .31
+
+  - id: geocodage-absurde
+    symptome: "Bulle ne trouve plus rien (« je ne trouve pas d'adresse pour… ») ou annonce un lieu à des centaines de kilomètres, et l'itinéraire fait 2000 km."
+    detection: {incident: [retour_negatif, outil_vide], motif: "ne trouve pas|localisation ne fonctionne"}
+    diagnostic: "Deux causes, toutes deux vues le 21/09. 1) Nominatim échoue sur le « à » de la phrase parlée : « Place des Arts à Montréal » ne renvoie RIEN, « Place des Arts, Montréal » renvoie le bon lieu. 2) Sans bounded=1, une adresse sans ville est cherchée dans le monde entier : « 3637 University » a été localisé à Charlottetown (808 km), et l'itinéraire est parti de là."
+    remede: "plan._requete transforme la préposition en virgule et retire l'article de tête ; plan.geocoder fait une première passe BORNÉE à la région (puis une seconde avec la ville de référence), et ne retient un résultat lointain que s'il est notoire (importance >= 0,45) ou dans la ville nommée par Greg. Couvert par tests/unitaires/test_geocodage.py — ne pas toucher à geocoder sans y ajouter le cas."
+    niveau: auto
+    zone: [cerveau/plan.py, tests/unitaires/test_geocodage.py]
+
+  - id: visage-hors-ligne
+    symptome: "Sur la TV, les yeux de Bulle ne sont plus que deux contours gris, sans pupille ni halo ; elle ne réagit plus à la voix et n'affiche plus de carte."
+    detection: {journal_pi: "kinectface-compagnon : connexion au cerveau fermée", incident: [retour_negatif], motif: "ne répond plus|ne réagit plus|contour|yeux gris"}
+    diagnostic: "Ce n'est pas une panne du visage : c'est le visage qui DIT la panne. Il n'a plus reçu de battement « lien » depuis vingt secondes (le compagnon en envoie un toutes les 5 s tant que la websocket est ouverte), donc le cerveau est injoignable ou le compagnon ne tourne plus. Avant le 21/09 le visage ne savait rien de tout ça : compagnon.py sortait en 75, systemd le relançait en boucle, et la TV continuait d'afficher une Bulle attentive qui n'écoutait plus rien."
+    remede: "Regarder d'abord « journalctl -u kinectface-compagnon » sur le Pi (192.0.2.6) : une boucle de redémarrages désigne le cerveau. Puis « curl http://192.0.2.31:8802/health » — /health reste ouvert sans jeton, exprès. Si le cerveau est mort : « systemctl status kinectface-cerveau » sur la VM ; s'il refuse de démarrer, vérifier ~/.config/bulle/jeton, sans lequel il ne démarre pas (c'est voulu). Le visage revient tout seul, en fondu, au premier battement reçu."
+    niveau: auto
+    zone: [face.py, compagnon.py]

@@ -1,0 +1,248 @@
+# Règles de comportement de Bulle — la zone que l'agent local peut modifier librement.
+# Chaque programme relit ce fichier quand il change (le cerveau) ou au démarrage (Pi : client, suivi).
+# Toute modification doit garder le banc de tests (tests/banc.yaml) au moins aussi bon.
+
+cerveau:
+  nom: Bulle
+  # Consignes ajoutées au prompt du préréglage « voix » d'Open WebUI (une consigne = une phrase autonome).
+  consignes:
+    - "Greg parle québécois : « ouvrir » une lumière veut dire l'allumer, « fermer » veut dire l'éteindre."
+    - "Pour allumer toutes les lumières, appelle allumer_tout ; pour les éteindre toutes, eteindre_tout."
+    - "Sans précision de pièce, « la lumière » désigne la lampe du salon (tu es sur la TV du salon) : utilise le nom « Lampe salon »."
+    - "Musique : Spotify joue sur le CXN100. « joue X » = play_search ; titres likés ou favoris = jouer_favoris ; un morceau précis = jouer_morceau ; « like ce titre » ou « ajoute aux favoris » = liker_morceau ; une playlist de Greg (« ma playlist … ») = jouer_playlist."
+    - "Pause, reprise, morceau suivant ou précédent = pause, play, next_track, previous_track ; volume de la musique = volume_musique (l'appareil est choisi automatiquement)."
+    - "« Joue », « reprends » ou « c'est parti » tout seuls, sans nom de morceau, d'artiste ni de playlist, veulent dire reprendre la musique en cours : appelle play. Ne cherche rien et n'annonce aucun titre que tu n'as pas joué."
+    - "N'utilise jamais commande_media pour la musique : il sert seulement à la TV quand Greg dit « la TV »."
+    - "Le panneau LED (les dalles) et son mode club se pilotent uniquement avec mode_club."
+    - "Situer un lieu (« où est », « c'est où », « localise-moi », « trouve-moi », « l'adresse de ») = lieu ; un trajet vers ce lieu (« comment aller à », « itinéraire », « envoie-moi le trajet sur mon téléphone ») = itineraire. Ces deux outils marchent pour n'importe quel commerce ou adresse : essaie toujours avant de dire que tu ne sais pas."
+    - "« Mode nuit », « bonne nuit », « je vais me coucher » = mode_nuit(actif=true) ; « sors du mode nuit », « bonjour », « réveille-toi » = mode_nuit(actif=false). En mode nuit tu réponds plus court et plus doucement."
+    - "La TV affiche une carte à côté de ton visage quand un outil renvoie une liste ou des chiffres (agenda, météo, rappels, musique, tâches et contacts du CRM) : c'est automatique, ne l'annonce pas. Comme l'écran montre le détail, dis à voix haute le nombre et les deux ou trois éléments qui comptent, sans réciter toute la liste ni les heures exactes."
+    - "Quand Greg demande comment un mot s'écrit, son orthographe, ou de l'épeler : appelle afficher avec mot = le mot et epeler = true, puis dis seulement le mot à voix haute — n'épelle jamais lettre par lettre à l'oral, ça ne s'entend pas."
+    - "Utilise afficher seulement quand la voix s'en sort mal et qu'aucun outil ne le fait : une énumération que tu composes toi-même, un mot à épeler, un choix numéroté entre plusieurs possibilités (« dis le deux »). Jamais pour répéter ta réponse à l'écran."
+    - "Tu es lue à voix haute : écris les nombres et les unités comme ils se disent (« 5 kilomètres-heure », « 9 degrés », « 91 pour cent », « il est 9 h 08 » et jamais « 09:08 »), sans abréviation à exposant comme « km h⁻¹ », et sans liste à puces ni tableau."
+    - "Pour changer un réglage de Bulle — durée des cartes ou des plans, volume maximum, luminosité du panneau LED, mémoire de conversation, oubli, cartes affichées ou non — appelle reglage ; sans valeur, il dit le réglage actuel. N'invente aucun autre réglage : si ce n'est pas dans cette liste, dis simplement que tu ne sais pas encore le régler."
+    - "Tu ne retiens un fait que si Greg te le demande EXPLICITEMENT (« retiens que », « souviens-toi que », « note que ») : appelle alors retenir. « Oublie que… » = oublier ; « qu'est-ce que tu sais de moi ? », « qu'est-ce que tu as retenu ? » = lister_souvenirs. Ne retiens jamais rien de ta propre initiative, même si ça te semble important."
+    - "Quand un outil renvoie « non_fait », dis-le : n'annonce que ce qui figure dans « fait »."
+    - "Règle absolue, qui ne concerne QUE les actions : n'utilise un outil que s'il fait exactement ce qui est demandé ; s'il n'existe pas d'outil pour l'action demandée (par exemple un appareil inconnu), dis simplement que tu ne sais pas encore le faire, n'utilise jamais un outil approchant et ne prétends jamais avoir fait une action qu'aucun outil n'a réalisée. Une question de connaissance, de langue ou de réflexion n'est pas une action : tu y réponds de mémoire, normalement, sans outil, en disant si tu n'es pas sûre."
+
+  # Réveil : fragments d'expression régulière reconnus comme le nom (n'importe où dans la phrase)
+  nom_variantes: [bulle, bull, bul, bule, buhl, bühl, obule, "lobules?"]
+  # Erreurs de Whisper acceptées seulement en apostrophe de début de phrase, suivies d'une ponctuation (« Boule, … »)
+  nom_mal_entendu: [boule, pull, bool, beautiful, belle, bulles, bu]
+  # Indice donné à Whisper (exemples de phrases commençant par le nom)
+  # ATTENTION : Whisper recrache parfois son indice mot pour mot sur du bruit (3 fausses météo le 19/09).
+  # L'indice doit donc être une LISTE DE MOTS, jamais une phrase qui ressemble à une demande.
+  indice_stt: "Bulle. Spotify, CXN100, Home Assistant, Montréal, mode club, titres likés."
+  # Transcriptions ignorées d'office (hallucinations de Whisper sur du bruit) : expressions régulières, sans accents
+  hallucinations: ['(.{6,}?)[ ,]+\1[ ,]+\1']      # même bout de phrase répété trois fois
+
+  # Signaux non verbaux mesurés par le Pi et joints à chaque énoncé (compagnon.py → server.SIGNAUX) : durée,
+  # niveau, probabilité de parole, retards entre micros, angle et distance donnés par la Kinect. Ils ne disent
+  # rien des mots — que de la géométrie et des niveaux.
+  # Ils préparent la détection « est-ce que ça m'était adressé », qui n'existe pas encore : aujourd'hui Bulle
+  # répond si elle entend son nom ou si la fenêtre est ouverte, point. On ne peut pas régler mieux sans avoir
+  # d'abord regardé à quoi ressemble un énoncé raté de peu, et c'est ce que ces lignes donnent à voir.
+  # `apres_reponse_s` : au-delà, un énoncé sans le nom n'est plus un raté de peu, c'est une conversation du
+  # salon — et il ne doit alors rester que l'heure, la longueur et la raison (voir server._signaux_a_garder).
+  signaux_non_verbaux:
+    actif: true
+    apres_reponse_s: 30
+
+  # Retour vocal négatif : marque l'échange précédent comme raté (matière première de l'agent)
+  retour_negatif: ["c'est pas ça", "c'est pas ce que", "ce n'est pas ça", "tu t'es trompé", "tu t'es trompée", "mauvaise réponse",
+                   "pas ce que j'ai demandé", "t'as rien compris", "tu as mal compris", "c'est faux",
+                   "ça ne marche pas", "ça marche pas", "il faudra corriger", "faudra corriger", "tu répètes"]   # formulations réelles de Greg (19/09)
+  retour_reponse: "D'accord, je le note pour m'améliorer. Qu'est-ce que tu voulais ?"
+
+  # Outils des serveurs OpenAPI retirés (inutiles à la voix depuis la TV)
+  outils_exclus: [drive_recents, drive_rechercher, lire_fichier_drive, creer_google_doc, creer_google_sheet, creer_presentation,
+                  exporter_drive, lister_palettes, styliser_presentation, lister_modeles, creer_presentation_depuis_modele, ajouter_diagramme]
+  # Serveurs MCP d'Open WebUI réutilisés : préfixe des noms + outils gardés
+  mcp:
+    twenty: {prefixe: twenty_, garder: [get_tool_catalog, execute_tool, learn_tools]}
+    spotify: {prefixe: "", garder: [get_playback, play_search, play, pause, next_track, previous_track, set_volume,
+                                    get_devices, transfer_playback, list_playlists, save_tracks]}
+  # Outils sans effet sur la maison (exécutés même en mode simulation) : noms exacts ou préfixes terminés par « * »
+  lecture_seule: ["get_*", "etat_*", "list_*", "lister_*", lieu, meteo_actuelle, previsions, agenda_du_jour, prochains_evenements,
+                  derniers_courriels, rechercher_courriels, lire_courriel, aujourdhui, calculer_echeance, difference, feries,
+                  calendrier_seances, server_status, gpu_usage_by_person, twenty_get_tool_catalog, twenty_learn_tools,
+                  lister_souvenirs]
+  # twenty_execute_tool est en lecture seule quand son toolName commence par l'un de ces préfixes
+  twenty_lecture: [find_, group_by_, search, list_]
+
+  musique:
+    appareil_par_defaut: CXN100
+    seuil_titre: 0.75          # ressemblance minimale titre demandé / titre liké (0-1)
+    favoris_max: 100
+    volume_max: 80             # le CXN100 est en mode préampli (19/09) : c'est le vrai volume de la pièce
+    mots_tv: '(?:^|[^a-z])(?:tv|t[ée]l[ée])'      # sans ces mots, commande_media est redirigé vers Spotify
+  club:
+    luminosite_max: 70         # au-delà, le Pi des dalles passe en sous-tension
+    mots_luminosite: "lumin|brill|intens|fort|faible|sombre|%|pour ?cent"
+  # Cartes affichées sur la TV à côté du visage (ce que la voix dit mal : listes, chiffres, orthographe).
+  # La carte est le rendu d'un RÉSULTAT D'OUTIL (cerveau/cartes.py), jamais du texte du LLM.
+  cartes:
+    actives: true
+    duree_s: 15                # elle s'efface toute seule ; 0 dans une carte = jusqu'au remplacement
+    exclues: []                # noms d'outils dont on ne veut pas de carte
+  # Noms d'outils inventés par le LLM (relevés dans les journaux) → le vrai outil.
+  alias_outils: {displayer: afficher, display: afficher, show: afficher, afficher_ecran: afficher,
+                 twelve_hour_time: aujourdhui, get_time: aujourdhui, heure_actuelle: aujourdhui}
+  # Confiance de Whisper (moyenne des avg_logprob, pondérée par la durée) en dessous de laquelle Bulle fait
+  # répéter au lieu d'agir. Le 21/09, « Jour à du 9 à la nuit. » avait créé un rappel pour 21 h.
+  # Étalonné le 21/09 sur la VM : 5 phrases de synthèse × 6 paliers de bruit, 30 transcriptions relues une à
+  # une. Il n'y a PAS de séparation nette — les deux populations se chevauchent largement :
+  #     transcription juste : -0,21 à -0,62        transcription fausse : -0,30 à -0,84
+  # Ce seuil n'est donc pas une frontière, c'est un FILTRE PRUDENT : à -0,65 il écarte 10 des 19 mauvaises
+  # transcriptions et aucune des 11 bonnes. La marge est mince (la pire bonne était à -0,62) : descendre à
+  # -0,60 ferait déjà répéter Greg pour rien. Monter le seuil attraperait plus de fautes et coûterait des
+  # répétitions — c'est l'arbitrage, et il se règle ici, à chaud.
+  # Les probabilités par mot discrimineraient mieux, mais la passerelle STT ne les renvoie pas.
+  # À REVOIR sur le vrai salon : la confiance de chaque énoncé est dans le journal et dans
+  # bulle_confiance_transcription. Vider la clé (null) désactive le contrôle sans déploiement.
+  confiance_stt_min: -0.65
+  phrase_mal_comprise: "Je n'ai pas bien entendu. Tu peux répéter ?"
+  # Préfixes que le modèle écrit de travers : il tape « twelve_ » là où le catalogue dit « twenty_ », et le
+  # colle même à des outils maison (« twelve_lancer_scene »). Clé = préfixe écrit, valeur = préfixe voulu ;
+  # le nom nu est essayé ensuite. Une règle plutôt qu'un alias par nom : la liste ne rattrapera jamais le modèle.
+  prefixes_outils_deformes: {twelve_: twenty_}
+  # Outils envoyés au LLM pour une phrase donnée (cerveau/selection_outils.py). Les 55 outils partaient tous
+  # dans le prompt à chaque tour : leurs schémas faisaient l'essentiel du préremplissage payé sur la 3090.
+  # ATTENTION, trois choses qui se paient cher si on les oublie :
+  #  1. les motifs sont comparés à la phrase SANS ACCENTS et en minuscules — écrire « lumiere », pas « lumière » ;
+  #  2. deux outils que le modèle confond doivent rester dans le MÊME groupe, sinon le cas du banc qui les
+  #     oppose passe sans plus rien prouver (d'où commande_media chez « musique », où il n'a rien à faire) ;
+  #  3. un groupe oublié n'est pas une panne : phrase non reconnue = catalogue complet, comme avant.
+  selection_outils:
+    actif: true
+    plafond: 30            # au-delà, on renvoie tout : la sélection ne gagne plus rien et ne fait qu'ajouter du risque
+    toujours: [afficher, aujourdhui]     # afficher sert à tous les sujets ; l'heure se demande en passant
+    groupes:
+      musique:
+        mots: 'musique|chanson|titre|morceau|artiste|album|playlist|spotify|cxn|joue|jouer|ecoute|reprend|pause|\bstop\b|suivant|precedent|\bsaute\b|like|favori|volume|\bson\b|monte le|baisse le|c.{0,2}est parti'
+        outils: [play, pause, play_search, next_track, previous_track, get_playback, get_devices, transfer_playback,
+                 set_volume, list_playlists, save_tracks, jouer_*, liker_morceau, volume_musique, commande_media,
+                 lieu]    # lieu : le banc interdit le plan sur « Mets de la musique. », il doit rester offert
+      maison:
+        mots: 'lumiere|lampe|allume|\bouvre|\bferme|eteint|eteins|etein|scene|ambiance|salon|cuisine|chambre|bureau|prise|ampli|thermostat|maison|appareil|\btv\b|tele'
+        outils: [allumer, allumer_tout, eteindre, eteindre_tout, etat_appareil, etat_maison, lancer_scene, commande_media]
+      club:
+        mots: 'club|\bled\b|dalle|panneau|palette|etincelle|strobo|brill|intens'
+        # allumer/lancer_scene voyagent avec : c'est LA confusion du 19/09 (« mode club » → toute la maison
+        # allumée), et trois cas du banc l'interdisent nommément. Les retirer rendrait ces cas muets.
+        outils: [mode_club, allumer, allumer_tout, lancer_scene]
+      nuit:
+        mots: 'bonne nuit|mode nuit|me coucher|\bdodo\b|reveille|bonjour|bon matin'
+        outils: [mode_nuit, eteindre, eteindre_tout, mode_club]    # le banc interdit les deux derniers sur « Bonne nuit »
+      agenda:
+        mots: 'agenda|calendrier|rendez|reunion|evenement|planning|programme|seance|\blibre\b|occupe|ferie|conge|cette semaine|demain|apres-midi'
+        outils: [agenda_du_jour, prochains_evenements, creer_evenement, supprimer_evenement, calendrier_seances, feries]
+      rappels:
+        mots: 'rappel|rappelle|pense-bete|\btache\b|\btaches\b|todo|n.{0,2}oublie|liste de choses'
+        # « mes tâches » ne veut PAS dire un rappel : elles vivent dans le CRM (deux cas du banc attendent
+        # twenty_execute_tool sur « Liste-moi les tâches que j'ai à faire »).
+        outils: [creer_rappel, lister_rappels, supprimer_rappel, twenty_*]
+      courriel:
+        mots: 'courriel|\bmail\b|\bmails\b|boite de reception|\binbox\b|brouillon|ecris a|envoie un|repond a|expediteur'
+        outils: [derniers_courriels, rechercher_courriels, lire_courriel, envoyer_courriel, creer_brouillon]
+      meteo:
+        mots: 'meteo|\btemps\b|temperature|pleut|pluie|neige|soleil|\bvent\b|degre|dehors|\bfroid|\bchaud|prevision|humidite'
+        outils: [meteo_actuelle, previsions]
+      lieu:
+        mots: 'ou est|ou se trouve|c.{0,2}est ou|adresse|localise|trouve-moi|itineraire|trajet|aller a|comment je vais|comment aller|me rendre|chemin|\broute\b|restaurant|epicerie|pharmacie|magasin|\bplan\b'
+        outils: [lieu, itineraire, notifier_telephone]
+      dates:
+        mots: '\bdate\b|\bheure\b|quel jour|quelle heure|combien de (jours|semaines|mois)|echeance|\bdelai\b|anniversaire|ferie'
+        outils: [aujourdhui, calculer_echeance, difference, feries]
+      crm:
+        mots: '\bcrm\b|twenty|contact|\bclient|entreprise|societe|opportunite|prospect|\bfiche\b'
+        outils: [twenty_*]
+      systeme:
+        mots: '\bgpu\b|carte graphique|serveur|\bvm\b|ollama|modele|reglage|\bregle\b|ta memoire|tu oublies|duree des cartes|volume maximum'
+        outils: [server_status, gpu_usage_by_person, reglage]
+      telephone:
+        mots: 'telephone|cellulaire|notification|\bsignal\b|envoie-moi|sur mon tel'
+        outils: [notifier_telephone]
+      memoire:
+        mots: 'retiens|retenir|souviens|souvenir|rappelle-toi|n.{0,2}oublie|oublie|tu sais de moi|tu as retenu|tu te rappelles|note que'
+        outils: [retenir, oublier, lister_souvenirs, creer_rappel, lister_rappels]   # « n'oublie pas de… » est un rappel, pas un souvenir
+      ecriture:
+        mots: 's.{0,2}ecrit|orthographe|epelle|epeler|ecrit-on|combien de (l|n|t|m|s)\b'
+        outils: [afficher]
+  # Mémoire longue : les faits que Greg demande explicitement de retenir (outil `retenir`, table `memoire`
+  # du journal). C'est le SEUL endroit où de la parole survit aux durées de vie de la section `journal` —
+  # d'où la voie étroite : rien n'y entre sans une demande à voix haute, et `oublier` en sort n'importe quoi.
+  # `max` plafonne ce qu'on injecte dans le prompt, pas ce que Greg a le droit de retenir : au-delà, ce sont
+  # les plus récents qui partent au modèle, et c'est le signe qu'il faudrait une vraie recherche.
+  memoire:
+    actif: true
+    max: 40
+    seuil_oubli: 0.5         # ressemblance minimale entre les mots de Greg et un souvenir pour l'effacer
+  # Lieux montrés sur un plan (outil « lieu ») : tuiles OpenStreetMap, mises en cache sur le cerveau.
+  lieu: {zoom_defaut: 16, duree_s: 25, autour_defaut: "Montréal, Québec"}   # oriente les recherches génériques
+  url_cerveau: http://192.0.2.31:8802   # d'où le Pi télécharge les plans
+  historique_tours: 6
+  oubli_apres_s: 600
+
+# Durée de vie des lignes du journal (jours), appliquée par la boucle de nuit avant l'analyse.
+# Ce qui porte la mémoire du projet — incidents, actions, fiches — vit longtemps ; la conversation s'efface.
+# Un énoncé qui n'était pas pour Bulle ne garde de toute façon aucun texte (cerveau/journal.py, fonction ignore).
+journal:
+  echanges_jours: 30
+  ignores_jours: 7           # il n'en reste que la raison, la longueur et l'heure
+  incidents_jours: 365
+  actions_jours: 365
+  tests_jours: 90            # seulement ceux déjà notés ✓ ou ✗ ; « à faire » ne s'efface jamais
+  retours_jours: 180         # idem : un retour non traité reste
+  sauvegardes: 14            # copies quotidiennes gardées dans ~/kinectface/etat/sauvegardes
+
+# Mode nuit : écran en veille, voix baissée, nom obligatoire (ni fenêtre de conversation, ni réveil par présence).
+nuit:
+  auto: true
+  debut: "21:00"             # heure locale
+  fin: "05:00"
+  luminosite_ecran: 0.15     # facteur appliqué au visage (0 = éteint)
+  volume_voix: 0.45          # facteur appliqué à la voix de Bulle
+  exiger_nom: true
+
+client:
+  # Coupe-parole : pouvoir interrompre Bulle pendant qu'elle parle (premiere marche du full-duplex, voir
+  # connaissances/full-duplex.md). DESACTIVE tant que la fuite du haut-parleur dans les micros n'est pas
+  # connue : le seuil vaut « le pic de fuite fois `marge` », et ce pic se lit dans la jauge Prometheus
+  # bulle_fuite_haut_parleur, que le Pi remonte maintenant a chaque enonce. Activer avant de l'avoir regarde,
+  # c'est laisser Bulle se couper la parole a elle-meme.
+  coupe_parole:
+    actif: false
+    marge: 2.5          # une vraie voix doit depasser ce multiple du pic de fuite
+    niveau_min: 400     # plancher, tant qu'aucune fuite n'a ete mesuree (sinon le seuil vaudrait zero)
+    blocs: 3            # blocs de 32 ms consecutifs au-dessus du seuil avant de couper
+    apres_s: 0.6        # on ne coupe pas dans la premiere demi-seconde d'une phrase (echo de la fin de la notre)
+  vad_seuil_on: 0.3
+  vad_seuil_off: 0.2
+  vad_gain: 20.0
+  fenetre_conversation_s: 15.0
+  preroll_blocs: 22            # blocs de 32 ms gardés avant le déclenchement
+  fin_silence_s: 0.75
+  endormi_apres_absence_s: 45
+  # Journal du niveau micro (--levels), lu par l'analyste (incident « parole_sous_seuil »). Au-dessus du seuil,
+  # une ligne par seconde ; en dessous, un battement toutes les niveaux_calme_s secondes, qui porte le maximum
+  # de la période. Le seuil DOIT rester sous les 0,15 que compte l'analyste, sinon il perd des secondes.
+  niveaux_seuil: 0.10
+  niveaux_calme_s: 60
+
+suivi:
+  # Santé thermique du Pi : relevée en continu par tracker.py, jugée par l'analyste.
+  # JARVIS vit entre 73 et 80 °C (mesuré le 21/09) : un seuil à 78 alerterait presque tous les jours pour rien.
+  # Le signal qui compte est le BRIDAGE — c'est lui qui dit que la machine perd vraiment de la fréquence ;
+  # la température ne sert que d'avertissement avant d'y arriver.
+  pi_temperature_max: 82     # °C, sur le pic des 24 h
+  pi_bride_part_max: 0.02    # part du temps passée à fréquence bridée
+  hauteur_min_lignes: 12       # une silhouette doit être haute (objet au sol ignoré)
+  immobile_absorbe_s: 180      # « personne » figée plus longtemps = mobilier déplacé : absorbée dans le fond
+  presence_mesures: 6          # mesures d'affilée pour annoncer une présence (~0,75 s)
+  absence_s: 6.0               # secondes sans personne avant d'annoncer un départ
+  ecart_fond_m: 0.25
+  distance_max_m: 4.5
+  scintillement_max: 0.25
+  bord_gauche: 4
+  bord_droit: 5

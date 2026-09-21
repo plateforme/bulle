@@ -1,0 +1,14 @@
+# Ce qu'il faut pour lancer `pytest` (tests unitaires) — donc pour la CI.
+# Le dépôt n'avait aucune liste de dépendances : celles-ci ont été relevées en important les modules du cerveau
+# sur une machine vierge. Aucune n'est un service : pas de LLM, pas de Kinect, pas de réseau.
+pytest
+pyyaml                 # config/regles.yaml, tests/banc.yaml, connaissances/pannes.yaml
+httpx                  # importé par cerveau/server.py
+fastapi                # idem
+python-multipart       # cerveau/suivi.py déclare des champs Form(...)
+pillow                 # cerveau/plan.py
+websockets             # tests/banc.py, qui porte aussi la règle « régression vs instable »
+tzdata                 # zoneinfo n'embarque pas la base de fuseaux sur Windows (America/Montreal)
+pygame                 # carte.py : les cartes du Pi se rendent sans écran (SDL_VIDEODRIVER=dummy) en CI
+numpy                  # compagnon.py : mesure de la fuite du haut-parleur (tests/unitaires/test_coupe_parole.py)
+segno                  # cerveau/plan.py : le QR code d'un lieu (tests/unitaires/test_plan_dessin.py)

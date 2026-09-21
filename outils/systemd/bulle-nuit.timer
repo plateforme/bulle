@@ -1,0 +1,9 @@
+[Unit]
+Description=Bulle : boucle nocturne à 3 h
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 America/Toronto
+Persistent=true
+
+[Install]
+WantedBy=timers.target

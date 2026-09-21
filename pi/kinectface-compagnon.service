@@ -1,0 +1,20 @@
+[Unit]
+Description=Client de Bulle : micros Kinect -> cerveau (VM .31) -> voix HDMI + visage
+After=network-online.target kinectface-face.service
+Wants=network-online.target
+# Le client se termine exprès à chaque coupure du cerveau (os._exit(75)) et compte sur systemd pour revenir.
+# Avec la limite par défaut (5 démarrages en 10 s) et RestartSec=2, le budget est épuisé en 10 s — alors qu'un
+# redémarrage du cerveau met une trentaine de secondes (ollama recharge le modèle). L'unité restait en
+# « failed » : Bulle n'écoute plus, le visage reste affiché, et rien ne le signale.
+StartLimitIntervalSec=0
+
+[Service]
+User=plateforme
+WorkingDirectory=/home/plateforme/kinectface
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/plateforme/kinectface/venv/bin/python /home/plateforme/kinectface/compagnon.py --levels
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
